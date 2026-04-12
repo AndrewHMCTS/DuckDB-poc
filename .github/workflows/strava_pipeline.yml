@@ -2,8 +2,8 @@ name: Strava Pipeline
 
 on:
   schedule:
-    - cron: '0 7 * * *'  # 7am UTC daily
-  workflow_dispatch:     # manual trigger button in GitHub UI — useful for testing
+    - cron: '0 7 * * *'  
+  workflow_dispatch:
 
 jobs:
   run_pipeline:
@@ -46,5 +46,5 @@ jobs:
           body: |
             The Strava pipeline failed on ${{ github.run_id }}.
             Check the logs here: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          to: your@email.com
-          from: your@email.com
+          to: andrew.mcdevitt@solirius.com
+          from: andrew.mcdevitt@solirius.com
