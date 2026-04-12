@@ -1,0 +1,50 @@
+name: Strava Pipeline
+
+on:
+  schedule:
+    - cron: '0 7 * * *'  # 7am UTC daily
+  workflow_dispatch:     # manual trigger button in GitHub UI — useful for testing
+
+jobs:
+  run_pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run pipeline
+        env:
+          S3_KEY_ID: ${{ secrets.S3_KEY_ID }}
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          MOTHERDUCK_ACCESS_TOKEN: ${{ secrets.MOTHERDUCK_ACCESS_TOKEN }}
+          STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
+          STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
+          STRAVA_REFRESH_TOKEN: ${{ secrets.STRAVA_REFRESH_TOKEN }}
+        run: uv run src/pipelines/e2e_pipelines/main.py
+
+      - name: Notify on failure
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.GMAIL_USERNAME }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          subject: "❌ Strava Pipeline Failed"
+          body: |
+            The Strava pipeline failed on ${{ github.run_id }}.
+            Check the logs here: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          to: your@email.com
+          from: your@email.com

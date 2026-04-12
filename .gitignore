@@ -1,0 +1,23 @@
+# Secrets
+.env
+
+# DuckDB local files
+*.duckdb
+*.duckdb.ducklake
+*.duckdb.wal
+
+# Raw JSON files — transient, not source controlled
+raw/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# uv
+.python-version
+
+# OS
+.DS_Store

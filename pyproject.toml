@@ -1,0 +1,48 @@
+[project]
+name = "duckdb-fun"
+version = "0.1.0"
+description = "DuckDB testing"
+authors = [{ name = "AM" }]
+readme = "README.md"
+requires-python = ">=3.9,<3.15"
+
+dependencies = [
+    "duckdb",
+    "requests",
+    "polars",
+    "pyarrow",
+    "dotenv",
+    "numpy",
+    "pandas",
+    "boto3",
+    "notebook"
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "pre-commit"
+]
+
+#[build-system]
+#requires = ["hatchling"]
+#build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # import sorting
+    "UP",  # pyupgrade
+    "B",   # bugbear
+]
+ignore = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
