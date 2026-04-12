@@ -29,7 +29,7 @@ def run():
         logger.info("PIPELINE START")
 
         logger.info("Stage 1: Extract from Strava API")
-        has_new_data = run_extraction(con)
+        has_new_data = run_extraction()
 
         if not has_new_data:
             logger.info("No new data — pipeline complete")

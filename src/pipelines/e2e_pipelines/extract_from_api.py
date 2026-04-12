@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from dotenv import load_dotenv
 import os
+import duckdb
 
 load_dotenv()
 
@@ -162,27 +163,33 @@ def save_raw(filename: str, data):
 
     logger.info("Saved %s", path)
 
-def run_extraction(con) -> bool:
+def get_watermark_from_motherduck() -> Optional[datetime]:
+    try:
+        con = duckdb.connect(f"md:strava?motherduck_token={os.getenv('MOTHERDUCK_ACCESS_TOKEN')}")
+        result = con.execute("""
+            SELECT MAX(start_date_utc) 
+            FROM gold.gold_activity_summary_table
+        """).fetchone()[0]
+        con.close()
+        if result:
+            logger.info("Watermark from MotherDuck: %s", result)
+            return result
+    except Exception as e:
+        logger.warning("Could not get watermark from MotherDuck: %s", e)
+    return None
+
+def run_extraction() -> bool:
     """
     Stage 1: Extract from Strava API.
     Derives watermark from bronze table — full load on first run,
     incremental on subsequent runs.
     Returns True if new data was found, False if nothing to process.
     """
-    # Derive watermark from bronze — no local file needed
-    watermark = None
-    try:
-        result = con.execute(
-            "SELECT MAX(start_date::TIMESTAMP) FROM bronze_activities"
-        ).fetchone()[0]
+    # Derive watermark from MotherDuck gold layer containing most recent run
+    watermark = get_watermark_from_motherduck()
 
-        if result:
-            watermark = result
-            logger.info("Watermark derived from bronze: %s", watermark)
-        else:
-            logger.info("Bronze table empty — full load")
-    except Exception:
-        logger.info("Bronze table not found — full load")
+    if not watermark:
+        logger.info("No watermark — full load")
 
     client = StravaClient()
     activities = client.get_activities(after=watermark)
