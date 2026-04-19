@@ -1,21 +1,20 @@
-import duckdb
-import time
 import logging
+import time
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
+import duckdb
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 FILES = [
-    'https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-01.parquet',
-    'https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-02.parquet',
-    'https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-03.parquet',
-    'https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-04.parquet',
-    'https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-05.parquet',
-    'https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-06.parquet'
+    "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-01.parquet",
+    "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-02.parquet",
+    "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-03.parquet",
+    "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-04.parquet",
+    "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-05.parquet",
+    "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-06.parquet",
 ]
+
 
 def benchmark(con, name: str, query: str) -> float:
     logger.info("Running: %s", name)
@@ -34,12 +33,19 @@ def run():
 
     results = {}
 
-    results["row_count"] = benchmark(con, "Row count", f"""
+    results["row_count"] = benchmark(
+        con,
+        "Row count",
+        f"""
         SELECT COUNT(*) AS total_trips
         FROM read_parquet({files_sql}, union_by_name=true)
-    """)
+    """,
+    )
 
-    results["revenue_by_month"] = benchmark(con, "Revenue by month", f"""
+    results["revenue_by_month"] = benchmark(
+        con,
+        "Revenue by month",
+        f"""
         SELECT
             MONTH(tpep_pickup_datetime)  AS month,
             COUNT(*)                     AS trips,
@@ -49,11 +55,15 @@ def run():
         WHERE total_amount > 0
         GROUP BY 1
         ORDER BY 1
-    """)
+    """,
+    )
 
     time.sleep(3)
 
-    results["busiest_hours"] = benchmark(con, "Busiest pickup hours", f"""
+    results["busiest_hours"] = benchmark(
+        con,
+        "Busiest pickup hours",
+        f"""
         SELECT
             HOUR(tpep_pickup_datetime)   AS hour_of_day,
             COUNT(*)                     AS trips,
@@ -62,11 +72,15 @@ def run():
         GROUP BY 1
         ORDER BY 2 DESC
         LIMIT 5
-    """)
+    """,
+    )
 
     time.sleep(5)
 
-    results["tip_analysis"] = benchmark(con, "Tip analysis", f"""
+    results["tip_analysis"] = benchmark(
+        con,
+        "Tip analysis",
+        f"""
         SELECT
             passenger_count,
             COUNT(*)                    AS trips,
@@ -79,11 +93,15 @@ def run():
           AND passenger_count > 0
         GROUP BY 1
         ORDER BY 1
-    """)
+    """,
+    )
 
     time.sleep(5)
 
-    results["payment_types"] = benchmark(con, "Payment type breakdown", f"""
+    results["payment_types"] = benchmark(
+        con,
+        "Payment type breakdown",
+        f"""
         SELECT
             CASE payment_type
                 WHEN 1 THEN 'Credit Card'
@@ -97,7 +115,8 @@ def run():
         FROM read_parquet({files_sql}, union_by_name=true)
         GROUP BY 1
         ORDER BY 2 DESC
-    """)
+    """,
+    )
 
     time.sleep(5)
 

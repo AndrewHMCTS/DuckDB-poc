@@ -1,22 +1,21 @@
-import duckdb
-import os
 import logging
+import os
+
+import duckdb
 from dotenv import load_dotenv
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-KEY_ID = os.getenv('S3_KEY_ID')
-ACCESS_KEY = os.getenv('S3_ACCESS_KEY')
-BUCKET = 'motherduck-test-am-testytest'
+KEY_ID = os.getenv("S3_KEY_ID")
+ACCESS_KEY = os.getenv("S3_ACCESS_KEY")
+BUCKET = "motherduck-test-am-testytest"
 
-DB_FILE = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "strava.duckdb")
-)
+DB_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "strava.duckdb"))
 
 dim_tables = {
-    'dim_date': """
+    "dim_date": """
         SELECT DISTINCT
             DATE_TRUNC('day', start_date_utc)::DATE AS date_id,
             YEAR(start_date_utc)                    AS year,
@@ -30,7 +29,7 @@ dim_tables = {
             DATE_TRUNC('month', start_date_utc)::DATE AS month_start
         FROM silver_activity_fact
     """,
-    'dim_activity_type': """
+    "dim_activity_type": """
         SELECT DISTINCT
             b.athlete_id,
             a.sport_type AS activity_type_id,
@@ -47,7 +46,7 @@ dim_tables = {
         LEFT JOIN bronze_activities b ON a.activity_id = b.activity_id
         WHERE a.sport_type IS NOT NULL
     """,
-    'dim_athlete': """
+    "dim_athlete": """
         SELECT DISTINCT
             b.athlete_id,
             'Andrew McDevitt' AS athlete_name
@@ -55,7 +54,7 @@ dim_tables = {
         LEFT JOIN bronze_activities b ON a.activity_id = b.activity_id
 
     """,
-    'fact_activities': """
+    "fact_activities": """
         SELECT
             a.activity_id,
             a.start_date_utc::DATE AS date_id,
@@ -90,7 +89,7 @@ dim_tables = {
         FROM silver_activity_fact a
         LEFT JOIN bronze_activities b ON a.activity_id = b.activity_id
         WHERE a.activity_id IS NOT NULL
-"""
+""",
 }
 
 
@@ -108,10 +107,7 @@ def create_dim_tables(con):
 
 
 def run():
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s"
-    )
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
     logger.info("Connecting to: %s", DB_FILE)
     con = duckdb.connect(DB_FILE)

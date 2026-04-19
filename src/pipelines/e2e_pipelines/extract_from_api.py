@@ -1,27 +1,22 @@
 import json
 import logging
 import os
-import requests
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Optional
-from dotenv import load_dotenv
-import os
+
 import duckdb
+import requests
+from dotenv import load_dotenv
 
 load_dotenv()
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-RAW_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "raw")
-)
+RAW_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "raw"))
 os.makedirs(RAW_DIR, exist_ok=True)
 logger.info("RAW_DIR: %s", RAW_DIR)
+
 
 class StravaClient:
     BASE_URL = "https://www.strava.com/api/v3"
@@ -46,9 +41,7 @@ class StravaClient:
         data = self._get_token()
         self._token = data["access_token"]
         expires_at = data["expires_at"]
-        self._token_expiry = datetime.fromtimestamp(
-            expires_at, tz=timezone.utc
-        ) - timedelta(seconds=60)
+        self._token_expiry = datetime.fromtimestamp(expires_at, tz=timezone.utc) - timedelta(seconds=60)
         if "refresh_token" in data:
             os.environ["STRAVA_REFRESH_TOKEN"] = data["refresh_token"]
         logger.info("Token refreshed. Expires at %s", self._token_expiry)
@@ -61,7 +54,7 @@ class StravaClient:
                 "client_secret": os.getenv("STRAVA_CLIENT_SECRET"),
                 "refresh_token": os.getenv("STRAVA_REFRESH_TOKEN"),
                 "grant_type": "refresh_token",
-            }
+            },
         )
         response.raise_for_status()
         return response.json()
@@ -75,7 +68,7 @@ class StravaClient:
         response.raise_for_status()
         return response.json()
 
-    def get_activities(self, after: Optional[datetime] = None) -> list:
+    def get_activities(self, after: datetime | None = None) -> list:
         """
         Fetch activities. If after is provided, only fetch activities
         newer than that datetime — incremental load.
@@ -109,7 +102,7 @@ class StravaClient:
             "Athlete %s %s — id: %d",
             results.get("firstname"),
             results.get("lastname"),
-            results["id"]
+            results["id"],
         )
         return results
 
@@ -140,14 +133,14 @@ def save_raw(filename: str, data):
     dedup_keys = {
         "raw_strava_activities": lambda r: r["id"],
         "raw_strava_comments_partial": lambda r: r["id"],
-        "raw_strava_kudos_partial": lambda r: f"{r['activity_id']}_{r['firstname']}_{r['lastname']}"
-        }
+        "raw_strava_kudos_partial": lambda r: f"{r['activity_id']}_{r['firstname']}_{r['lastname']}",
+    }
 
     if isinstance(data, list) and filename in dedup_keys:
         key_fn = dedup_keys[filename]
         existing = []
         if os.path.exists(path):
-            with open(path, "r") as f:
+            with open(path) as f:
                 existing = json.load(f)
 
         merged = {key_fn(r): r for r in existing}
@@ -163,7 +156,8 @@ def save_raw(filename: str, data):
 
     logger.info("Saved %s", path)
 
-def get_watermark_from_motherduck() -> Optional[datetime]:
+
+def get_watermark_from_motherduck() -> datetime | None:
     try:
         con = duckdb.connect(f"md:strava?motherduck_token={os.getenv('MOTHERDUCK_ACCESS_TOKEN')}")
         result = con.execute("""
@@ -177,6 +171,7 @@ def get_watermark_from_motherduck() -> Optional[datetime]:
     except Exception as e:
         logger.warning("Could not get watermark from MotherDuck: %s", e)
     return None
+
 
 def run_extraction() -> bool:
     """

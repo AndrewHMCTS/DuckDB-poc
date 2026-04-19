@@ -1,25 +1,21 @@
-import duckdb
 import logging
 import os
-from dotenv import load_dotenv
 
-from extract_from_api import run_extraction
-from elt_to_s3 import run_elt
-from create_dims import create_dim_tables
+import duckdb
 from connect_s3_motherduck import sync_to_motherduck
+from create_dims import create_dim_tables
+from dotenv import load_dotenv
+from elt_to_s3 import run_elt
+from extract_from_api import run_extraction
 
 load_dotenv()
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-DB_FILE = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "strava.duckdb")
-)
+DB_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "strava.duckdb"))
 logger.info(f"Connecting to: {DB_FILE}")
+
 
 def run():
     con = duckdb.connect(DB_FILE)

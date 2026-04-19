@@ -1,15 +1,16 @@
-import duckdb
-import os
 import logging
+import os
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-KEY_ID = os.getenv('S3_KEY_ID')
-ACCESS_KEY = os.getenv('S3_ACCESS_KEY')
-BUCKET = 'motherduck-test-am-testytest'
+KEY_ID = os.getenv("S3_KEY_ID")
+ACCESS_KEY = os.getenv("S3_ACCESS_KEY")
+BUCKET = "motherduck-test-am-testytest"
+
 
 def setup_s3_connection(con):
     con.execute("INSTALL httpfs; LOAD httpfs")
@@ -23,6 +24,7 @@ def setup_s3_connection(con):
         )
     """)
 
+
 def validate_counts(con, source: str, target: str):
     """Log row counts between layers, raise if target is empty"""
     src = con.execute(f"SELECT COUNT(*) FROM {source}").fetchone()[0]
@@ -34,11 +36,11 @@ def validate_counts(con, source: str, target: str):
 
 def create_raw_tables(con):
     raw_files = {
-        'raw_strava_activities': 'raw_activities',
-        'raw_strava_comments_partial': 'raw_strava_comments',
-        'raw_strava_kudos_partial': 'raw_kudos',
-        'raw_stats_for_athlete': 'raw_stats_for_athlete',
-        'raw_athlete': 'raw_athlete'
+        "raw_strava_activities": "raw_activities",
+        "raw_strava_comments_partial": "raw_strava_comments",
+        "raw_strava_kudos_partial": "raw_kudos",
+        "raw_stats_for_athlete": "raw_stats_for_athlete",
+        "raw_athlete": "raw_athlete",
     }
 
     for file, table_name in raw_files.items():
@@ -58,6 +60,7 @@ def create_raw_tables(con):
         """)
 
     logger.info("Raw layer complete")
+
 
 def create_bronze_tables(con):
     """
@@ -120,7 +123,7 @@ def create_bronze_tables(con):
     # Remaining bronze tables — these are safe to full refresh
     # as they're derived from bronze_activities which is already deduped
     other_bronze = {
-        'bronze_heartrate': """
+        "bronze_heartrate": """
             SELECT
                 id AS activity_id,
                 has_heartrate,
@@ -130,7 +133,7 @@ def create_bronze_tables(con):
                 display_hide_heartrate_option
             FROM raw_activities
         """,
-        'bronze_metrics': """
+        "bronze_metrics": """
             SELECT
                 id AS activity_id,
                 distance,
@@ -143,7 +146,7 @@ def create_bronze_tables(con):
                 elev_low
             FROM raw_activities
         """,
-        'bronze_engagement': """
+        "bronze_engagement": """
             SELECT
                 id AS activity_id,
                 achievement_count,
@@ -155,7 +158,7 @@ def create_bronze_tables(con):
                 pr_count
             FROM raw_activities
         """,
-        'bronze_location': """
+        "bronze_location": """
             SELECT
                 id AS activity_id,
                 location_city,
@@ -163,7 +166,7 @@ def create_bronze_tables(con):
                 location_country
             FROM raw_activities
         """,
-        'bronze_map': """
+        "bronze_map": """
             SELECT
                 id AS activity_id,
                 map.id AS map_id,
@@ -171,13 +174,13 @@ def create_bronze_tables(con):
                 map.resource_state
             FROM raw_activities
         """,
-        'bronze_geo': """
+        "bronze_geo": """
             SELECT
                 id AS activity_id,
                 start_latlng,
                 end_latlng
             FROM raw_activities
-        """
+        """,
     }
 
     for table_name, query in other_bronze.items():
@@ -191,9 +194,10 @@ def create_bronze_tables(con):
 
     logger.info("Bronze layer complete")
 
+
 def create_silver_tables(con):
     silver_tables = {
-        'silver_activities': """
+        "silver_activities": """
             SELECT
                 a.activity_id,
                 a.name,
@@ -228,7 +232,7 @@ def create_silver_tables(con):
             LEFT JOIN bronze_metrics m ON a.activity_id = m.activity_id
             WHERE a.activity_id IS NOT NULL
         """,
-        'silver_heartrate': """
+        "silver_heartrate": """
             SELECT
                 activity_id,
                 CASE WHEN has_heartrate THEN average_heartrate ELSE NULL END AS average_heartrate,
@@ -237,7 +241,7 @@ def create_silver_tables(con):
             FROM bronze_heartrate
             WHERE activity_id IS NOT NULL
         """,
-        'silver_engagement': """
+        "silver_engagement": """
             SELECT
                 activity_id,
                 achievement_count,
@@ -250,7 +254,7 @@ def create_silver_tables(con):
             FROM bronze_engagement
             WHERE activity_id IS NOT NULL
         """,
-        'silver_location': """
+        "silver_location": """
             SELECT
                 activity_id,
                 location_city,
@@ -258,7 +262,7 @@ def create_silver_tables(con):
                 location_country
             FROM bronze_location
             WHERE activity_id IS NOT NULL
-        """
+        """,
     }
 
     for table_name, query in silver_tables.items():
@@ -302,9 +306,10 @@ def create_silver_tables(con):
 
     logger.info("Silver layer complete")
 
+
 def create_gold_tables(con):
     gold_tables = {
-        'gold_activity_summary': """
+        "gold_activity_summary": """
             SELECT
                 activity_id,
                 name,
@@ -325,7 +330,7 @@ def create_gold_tables(con):
                 DATE_TRUNC('month', start_date_utc) AS month_start
             FROM silver_activity_fact
         """,
-        'gold_weekly_stats': """
+        "gold_weekly_stats": """
             SELECT
                 DATE_TRUNC('week', start_date_utc) AS week_start,
                 COUNT(*) AS activity_count,
@@ -343,7 +348,7 @@ def create_gold_tables(con):
             GROUP BY 1
             ORDER BY 1
         """,
-        'gold_monthly_stats': """
+        "gold_monthly_stats": """
             SELECT
                 DATE_TRUNC('month', start_date_utc) AS month_start,
                 COUNT(*) AS activity_count,
@@ -360,13 +365,13 @@ def create_gold_tables(con):
             GROUP BY 1
             ORDER BY 1
         """,
-        'gold_pb_efforts': """
+        "gold_pb_efforts": """
             SELECT *
             FROM silver_activity_fact
             ORDER BY pace_min_per_km ASC
             LIMIT 10
         """,
-        'gold_training_load': """
+        "gold_training_load": """
             SELECT
                 activity_id,
                 start_date_utc,
@@ -376,7 +381,7 @@ def create_gold_tables(con):
                 (moving_time_min * average_heartrate) AS effort_score
             FROM silver_activity_fact
             WHERE average_heartrate IS NOT NULL
-        """
+        """,
     }
 
     for table_name, query in gold_tables.items():
@@ -389,6 +394,7 @@ def create_gold_tables(con):
         """)
 
     logger.info("Gold layer complete")
+
 
 def run_elt(con):
     """
