@@ -62,42 +62,67 @@ def create_raw_tables(con):
     logger.info("Raw layer complete")
 
 
+def restore_bronze_from_s3(con):
+    """
+    Restore bronze_activities from S3 before inserting new records.
+    This is essential because GitHub Actions spins up a fresh runner each time,
+    meaning the local strava.duckdb is always empty — without this restore,
+    bronze_activities only ever contains the current batch and all history is lost.
+
+    On first run (no S3 file yet), falls back to creating an empty table.
+    """
+    s3_path = f"s3://{BUCKET}/bronze/bronze_activities.parquet"
+    try:
+        con.execute(f"""
+            CREATE TABLE IF NOT EXISTS bronze_activities AS
+            SELECT * FROM read_parquet('{s3_path}')
+        """)
+        count = con.execute("SELECT COUNT(*) FROM bronze_activities").fetchone()[0]
+        logger.info("bronze_activities restored from S3 — %d existing rows", count)
+    except Exception as e:
+        logger.info("No existing bronze on S3 (first run) — starting fresh. Reason: %s", e)
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS bronze_activities (
+                activity_id BIGINT PRIMARY KEY,
+                athlete_id BIGINT,
+                name VARCHAR,
+                type VARCHAR,
+                sport_type VARCHAR,
+                workout_type INTEGER,
+                device_name VARCHAR,
+                start_date VARCHAR,
+                start_date_local VARCHAR,
+                timezone VARCHAR,
+                utc_offset DOUBLE,
+                trainer BOOLEAN,
+                commute BOOLEAN,
+                manual BOOLEAN,
+                private BOOLEAN,
+                visibility VARCHAR,
+                flagged BOOLEAN,
+                gear_id VARCHAR,
+                upload_id BIGINT,
+                upload_id_str VARCHAR,
+                external_id VARCHAR,
+                from_accepted_tag BOOLEAN,
+                has_kudoed BOOLEAN
+            )
+        """)
+
+
 def create_bronze_tables(con):
     """
     Bronze is append-only + deduplicated on activity_id.
     New records are inserted, existing records are never overwritten.
+
+    IMPORTANT: restore_bronze_from_s3() must be called first so that
+    bronze_activities contains full history, not just the current batch.
     """
 
-    # Create bronze tables if they don't exist yet (first run)
-    con.execute("""
-        CREATE TABLE IF NOT EXISTS bronze_activities (
-            activity_id BIGINT PRIMARY KEY,
-            athlete_id BIGINT,
-            name VARCHAR,
-            type VARCHAR,
-            sport_type VARCHAR,
-            workout_type INTEGER,
-            device_name VARCHAR,
-            start_date VARCHAR,
-            start_date_local VARCHAR,
-            timezone VARCHAR,
-            utc_offset DOUBLE,
-            trainer BOOLEAN,
-            commute BOOLEAN,
-            manual BOOLEAN,
-            private BOOLEAN,
-            visibility VARCHAR,
-            flagged BOOLEAN,
-            gear_id VARCHAR,
-            upload_id BIGINT,
-            upload_id_str VARCHAR,
-            external_id VARCHAR,
-            from_accepted_tag BOOLEAN,
-            has_kudoed BOOLEAN
-        )
-    """)
+    # Step 1: Restore full history from S3 into local DuckDB
+    restore_bronze_from_s3(con)
 
-    # Insert only new records — deduplication on activity_id
+    # Step 2: Insert only new records — deduplication on activity_id
     con.execute("""
         INSERT INTO bronze_activities
         SELECT
@@ -114,14 +139,15 @@ def create_bronze_tables(con):
 
     validate_counts(con, "raw_activities", "bronze_activities")
 
+    # Step 3: Write full bronze (history + new) back to S3
     con.execute(f"""
         COPY (SELECT * FROM bronze_activities)
         TO 's3://{BUCKET}/bronze/bronze_activities.parquet'
         (FORMAT PARQUET, COMPRESSION ZSTD)
     """)
 
-    # Remaining bronze tables — these are safe to full refresh
-    # as they're derived from bronze_activities which is already deduped
+    # Remaining bronze tables — safe to full refresh as they're derived
+    # from bronze_activities which now contains complete history
     other_bronze = {
         "bronze_heartrate": """
             SELECT
@@ -403,7 +429,7 @@ def run_elt(con):
     """
     setup_s3_connection(con)
     create_raw_tables(con)
-    create_bronze_tables(con)
+    create_bronze_tables(con)  # restores full history from S3 before inserting
     create_silver_tables(con)
     create_gold_tables(con)
     logger.info("ELT complete")
