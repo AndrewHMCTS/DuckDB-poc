@@ -44,7 +44,7 @@ def run():
 
     except Exception as e:
         logger.error("PIPELINE FAILED ❌: %s", e)
-        raise  # re-raise so GitHub Actions marks the run as failed
+        raise
 
     finally:
         con.close()
