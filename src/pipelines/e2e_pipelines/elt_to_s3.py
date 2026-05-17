@@ -150,27 +150,7 @@ def create_bronze_tables(con):
             average_heartrate, max_heartrate, average_cadence,
             pr_count, kudos_count, achievement_count
         FROM raw_activities
-        ON CONFLICT (activity_id) DO UPDATE SET
-            name                 = EXCLUDED.name,
-            type                 = EXCLUDED.type,
-            sport_type           = EXCLUDED.sport_type,
-            workout_type         = EXCLUDED.workout_type,
-            device_name          = EXCLUDED.device_name,
-            visibility           = EXCLUDED.visibility,
-            flagged              = EXCLUDED.flagged,
-            has_kudoed           = EXCLUDED.has_kudoed,
-            distance             = EXCLUDED.distance,
-            moving_time          = EXCLUDED.moving_time,
-            elapsed_time         = EXCLUDED.elapsed_time,
-            total_elevation_gain = EXCLUDED.total_elevation_gain,
-            average_speed        = EXCLUDED.average_speed,
-            max_speed            = EXCLUDED.max_speed,
-            average_heartrate    = EXCLUDED.average_heartrate,
-            max_heartrate        = EXCLUDED.max_heartrate,
-            average_cadence      = EXCLUDED.average_cadence,
-            pr_count             = EXCLUDED.pr_count,
-            kudos_count          = EXCLUDED.kudos_count,
-            achievement_count    = EXCLUDED.achievement_count
+        WHERE id NOT IN (SELECT activity_id FROM bronze_activities)
     """)
 
     validate_counts(con, "raw_activities", "bronze_activities")
