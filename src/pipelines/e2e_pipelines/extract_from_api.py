@@ -77,7 +77,6 @@ class StravaClient:
         params = {"per_page": 200}
 
         if after:
-            # Strava expects unix timestamp
             params["after"] = int(after.timestamp())
             logger.info("Incremental load — after %s", after.isoformat())
         else:
@@ -180,7 +179,7 @@ def run_extraction() -> bool:
     incremental on subsequent runs.
     Returns True if new data was found, False if nothing to process.
     """
-    # Derive watermark from MotherDuck gold layer containing most recent run
+    # derive watermark from MotherDuck gold layer containing most recent run
     watermark = get_watermark_from_motherduck()
 
     if not watermark:

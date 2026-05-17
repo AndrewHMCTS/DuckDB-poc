@@ -46,13 +46,13 @@ def create_raw_tables(con):
     for file, table_name in raw_files.items():
         logger.info("Loading raw table: %s", table_name)
 
-        # Always full refresh raw local tables from JSON
+        # full refresh raw local tables from JSON
         con.execute(f"""
             CREATE OR REPLACE TABLE {table_name} AS
             SELECT * FROM read_json_auto('raw/{file}.json')
         """)
 
-        # Upload to S3 raw layer
+        # upload to S3 raw layer
         con.execute(f"""
             COPY (SELECT * FROM {table_name})
             TO 's3://{BUCKET}/raw/{table_name}.parquet'
@@ -82,32 +82,44 @@ def restore_bronze_from_s3(con):
     except Exception as e:
         logger.info("No existing bronze on S3 (first run) — starting fresh. Reason: %s", e)
         con.execute("""
-            CREATE TABLE IF NOT EXISTS bronze_activities (
-                activity_id BIGINT PRIMARY KEY,
-                athlete_id BIGINT,
-                name VARCHAR,
-                type VARCHAR,
-                sport_type VARCHAR,
-                workout_type INTEGER,
-                device_name VARCHAR,
-                start_date VARCHAR,
-                start_date_local VARCHAR,
-                timezone VARCHAR,
-                utc_offset DOUBLE,
-                trainer BOOLEAN,
-                commute BOOLEAN,
-                manual BOOLEAN,
-                private BOOLEAN,
-                visibility VARCHAR,
-                flagged BOOLEAN,
-                gear_id VARCHAR,
-                upload_id BIGINT,
-                upload_id_str VARCHAR,
-                external_id VARCHAR,
-                from_accepted_tag BOOLEAN,
-                has_kudoed BOOLEAN
-            )
-        """)
+        CREATE TABLE IF NOT EXISTS bronze_activities (
+            activity_id BIGINT PRIMARY KEY,
+            athlete_id BIGINT,
+            name VARCHAR,
+            type VARCHAR,
+            sport_type VARCHAR,
+            workout_type INTEGER,
+            device_name VARCHAR,
+            start_date VARCHAR,
+            start_date_local VARCHAR,
+            timezone VARCHAR,
+            utc_offset DOUBLE,
+            trainer BOOLEAN,
+            commute BOOLEAN,
+            manual BOOLEAN,
+            private BOOLEAN,
+            visibility VARCHAR,
+            flagged BOOLEAN,
+            gear_id VARCHAR,
+            upload_id BIGINT,
+            upload_id_str VARCHAR,
+            external_id VARCHAR,
+            from_accepted_tag BOOLEAN,
+            has_kudoed BOOLEAN,
+            distance DOUBLE,
+            moving_time INTEGER,
+            elapsed_time INTEGER,
+            total_elevation_gain DOUBLE,
+            average_speed DOUBLE,
+            max_speed DOUBLE,
+            average_heartrate DOUBLE,
+            max_heartrate DOUBLE,
+            average_cadence DOUBLE,
+            pr_count INTEGER,
+            kudos_count INTEGER,
+            achievement_count INTEGER
+        )
+    """)
 
 
 def create_bronze_tables(con):
@@ -115,16 +127,16 @@ def create_bronze_tables(con):
     Bronze is append-only + deduplicated on activity_id.
     New records are inserted, existing records are never overwritten.
 
-    IMPORTANT: restore_bronze_from_s3() must be called first so that
-    bronze_activities contains full history, not just the current batch.
+    restore_bronze_from_s3() must be called first so that
+    bronze_activities contains full history before we insert new records from raw_activities.
     """
 
-    # Step 1: Restore full history from S3 into local DuckDB
+    # restore full history from S3 into local DuckDB
     restore_bronze_from_s3(con)
 
-    # Step 2: Insert only new records — deduplication on activity_id
+    # insert only new records + updates to existing records from raw_activities into bronze_activities
     con.execute("""
-        INSERT INTO bronze_activities
+        INSERT INTO bronze_activities BY NAME
         SELECT
             id AS activity_id,
             athlete.id AS athlete_id,
@@ -132,22 +144,45 @@ def create_bronze_tables(con):
             start_date, start_date_local, timezone, utc_offset,
             trainer, commute, manual, private, visibility, flagged,
             gear_id, upload_id, upload_id_str, external_id,
-            from_accepted_tag, has_kudoed
+            from_accepted_tag, has_kudoed,
+            distance, moving_time, elapsed_time,
+            total_elevation_gain, average_speed, max_speed,
+            average_heartrate, max_heartrate, average_cadence,
+            pr_count, kudos_count, achievement_count
         FROM raw_activities
-        WHERE id NOT IN (SELECT activity_id FROM bronze_activities)
+        ON CONFLICT (activity_id) DO UPDATE SET
+            name                 = EXCLUDED.name,
+            type                 = EXCLUDED.type,
+            sport_type           = EXCLUDED.sport_type,
+            workout_type         = EXCLUDED.workout_type,
+            device_name          = EXCLUDED.device_name,
+            visibility           = EXCLUDED.visibility,
+            flagged              = EXCLUDED.flagged,
+            has_kudoed           = EXCLUDED.has_kudoed,
+            distance             = EXCLUDED.distance,
+            moving_time          = EXCLUDED.moving_time,
+            elapsed_time         = EXCLUDED.elapsed_time,
+            total_elevation_gain = EXCLUDED.total_elevation_gain,
+            average_speed        = EXCLUDED.average_speed,
+            max_speed            = EXCLUDED.max_speed,
+            average_heartrate    = EXCLUDED.average_heartrate,
+            max_heartrate        = EXCLUDED.max_heartrate,
+            average_cadence      = EXCLUDED.average_cadence,
+            pr_count             = EXCLUDED.pr_count,
+            kudos_count          = EXCLUDED.kudos_count,
+            achievement_count    = EXCLUDED.achievement_count
     """)
 
     validate_counts(con, "raw_activities", "bronze_activities")
 
-    # Step 3: Write full bronze (history + new) back to S3
+    # write full bronze (history + new) back to S3
     con.execute(f"""
         COPY (SELECT * FROM bronze_activities)
         TO 's3://{BUCKET}/bronze/bronze_activities.parquet'
         (FORMAT PARQUET, COMPRESSION ZSTD)
     """)
 
-    # Remaining bronze tables — safe to full refresh as they're derived
-    # from bronze_activities which now contains complete history
+    # remaining bronze tables — safe to full refresh as they're derived from bronze_activities
     other_bronze = {
         "bronze_heartrate": """
             SELECT
@@ -300,7 +335,6 @@ def create_silver_tables(con):
             (FORMAT PARQUET, COMPRESSION ZSTD)
         """)
 
-    # Silver fact — full refresh, always rebuilt from all bronze
     logger.info("Creating silver_activity_fact")
     con.execute("""
         CREATE OR REPLACE TABLE silver_activity_fact AS
@@ -429,7 +463,7 @@ def run_elt(con):
     """
     setup_s3_connection(con)
     create_raw_tables(con)
-    create_bronze_tables(con)  # restores full history from S3 before inserting
+    create_bronze_tables(con)
     create_silver_tables(con)
     create_gold_tables(con)
     logger.info("ELT complete")

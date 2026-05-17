@@ -37,7 +37,6 @@ def sync_to_motherduck():
 
     con.execute("INSTALL httpfs; LOAD httpfs")
 
-    # IF NOT EXISTS — avoids error if secret already registered
     con.execute(f"""
         CREATE SECRET IF NOT EXISTS s3_strava (
             TYPE S3,
