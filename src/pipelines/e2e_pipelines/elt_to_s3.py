@@ -147,7 +147,8 @@ def create_bronze_tables(con):
             from_accepted_tag, has_kudoed,
             distance, moving_time, elapsed_time,
             total_elevation_gain, average_speed, max_speed,
-            average_heartrate, max_heartrate, average_cadence,
+            average_heartrate, max_heartrate, 
+            TRY_CAST(NULL AS DOUBLE) AS average_cadence,
             pr_count, kudos_count, achievement_count
         FROM raw_activities
         WHERE id NOT IN (SELECT activity_id FROM bronze_activities)
