@@ -149,7 +149,7 @@ def create_bronze_tables(con):
             total_elevation_gain, average_speed, max_speed,
             average_heartrate, max_heartrate, 
             TRY_CAST(NULL AS DOUBLE) AS average_cadence,
-            pr_count, kudos_count, achievement_count, elev_high
+            pr_count, kudos_count, achievement_count
         FROM raw_activities
         WHERE id NOT IN (SELECT activity_id FROM bronze_activities)
     """)
