@@ -149,7 +149,7 @@ def create_bronze_tables(con):
             total_elevation_gain, average_speed, max_speed,
             average_heartrate, max_heartrate, 
             TRY_CAST(NULL AS DOUBLE) AS average_cadence,
-            pr_count, kudos_count, achievement_count
+            pr_count, kudos_count, achievement_count, elev_high
         FROM raw_activities
         WHERE id NOT IN (SELECT activity_id FROM bronze_activities)
     """)
@@ -173,7 +173,7 @@ def create_bronze_tables(con):
                 max_heartrate,
                 heartrate_opt_out,
                 display_hide_heartrate_option
-            FROM raw_activities
+            FROM bronze_activities
         """,
         "bronze_metrics": """
             SELECT
@@ -186,7 +186,7 @@ def create_bronze_tables(con):
                 max_speed,
                 elev_high,
                 elev_low
-            FROM raw_activities
+            FROM bronze_activities
         """,
         "bronze_engagement": """
             SELECT
@@ -198,7 +198,7 @@ def create_bronze_tables(con):
                 photo_count,
                 total_photo_count,
                 pr_count
-            FROM raw_activities
+            FROM bronze_activities
         """,
         "bronze_location": """
             SELECT
@@ -206,7 +206,7 @@ def create_bronze_tables(con):
                 location_city,
                 location_state,
                 location_country
-            FROM raw_activities
+            FROM bronze_activities
         """,
         "bronze_map": """
             SELECT
@@ -214,14 +214,14 @@ def create_bronze_tables(con):
                 map.id AS map_id,
                 map.summary_polyline,
                 map.resource_state
-            FROM raw_activities
+            FROM bronze_activities
         """,
         "bronze_geo": """
             SELECT
                 id AS activity_id,
                 start_latlng,
                 end_latlng
-            FROM raw_activities
+            FROM bronze_activities
         """,
     }
 
@@ -243,17 +243,17 @@ def create_silver_tables(con):
             SELECT
                 a.activity_id,
                 a.name,
-                m.distance / 1000.0 AS distance_km,
-                m.moving_time / 60.0 AS moving_time_min,
-                m.elapsed_time / 60.0 AS elapsed_time_min,
+                a.distance / 1000.0 AS distance_km,
+                a.moving_time / 60.0 AS moving_time_min,
+                a.elapsed_time / 60.0 AS elapsed_time_min,
                 CASE
                     WHEN m.distance > 0
                     THEN (m.moving_time / 60.0) / (m.distance / 1000.0)
                     ELSE NULL
                 END AS pace_min_per_km,
-                m.total_elevation_gain AS total_elevation_m,
-                m.average_speed,
-                m.max_speed,
+                a.total_elevation_gain AS total_elevation_m,
+                a.average_speed,
+                a.max_speed,
                 m.elev_high,
                 m.elev_low,
                 a.type,
