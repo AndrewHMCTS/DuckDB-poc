@@ -167,7 +167,7 @@ def create_bronze_tables(con):
     other_bronze = {
         "bronze_heartrate": """
             SELECT
-                id AS activity_id,
+                activity_id,
                 has_heartrate,
                 average_heartrate,
                 max_heartrate,
@@ -177,7 +177,7 @@ def create_bronze_tables(con):
         """,
         "bronze_metrics": """
             SELECT
-                id AS activity_id,
+                activity_id,
                 distance,
                 moving_time,
                 elapsed_time,
@@ -190,7 +190,7 @@ def create_bronze_tables(con):
         """,
         "bronze_engagement": """
             SELECT
-                id AS activity_id,
+                activity_id,
                 achievement_count,
                 kudos_count,
                 comment_count,
@@ -202,7 +202,7 @@ def create_bronze_tables(con):
         """,
         "bronze_location": """
             SELECT
-                id AS activity_id,
+                activity_id,
                 location_city,
                 location_state,
                 location_country
@@ -210,7 +210,7 @@ def create_bronze_tables(con):
         """,
         "bronze_map": """
             SELECT
-                id AS activity_id,
+                activity_id,
                 map.id AS map_id,
                 map.summary_polyline,
                 map.resource_state
@@ -218,7 +218,7 @@ def create_bronze_tables(con):
         """,
         "bronze_geo": """
             SELECT
-                id AS activity_id,
+                activity_id,
                 start_latlng,
                 end_latlng
             FROM bronze_activities
