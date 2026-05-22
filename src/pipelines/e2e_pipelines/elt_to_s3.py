@@ -72,16 +72,8 @@ def restore_bronze_from_s3(con):
     On first run (no S3 file yet), falls back to creating an empty table.
     """
     s3_path = f"s3://{BUCKET}/bronze/bronze_activities.parquet"
-    try:
-        con.execute(f"""
-            CREATE TABLE IF NOT EXISTS bronze_activities AS
-            SELECT * FROM read_parquet('{s3_path}')
-        """)
-        count = con.execute("SELECT COUNT(*) FROM bronze_activities").fetchone()[0]
-        logger.info("bronze_activities restored from S3 — %d existing rows", count)
-    except Exception as e:
-        logger.info("No existing bronze on S3 (first run) — starting fresh. Reason: %s", e)
-        con.execute("""
+
+    con.execute("""
         CREATE TABLE IF NOT EXISTS bronze_activities (
             activity_id BIGINT PRIMARY KEY,
             athlete_id BIGINT,
@@ -117,9 +109,30 @@ def restore_bronze_from_s3(con):
             average_cadence DOUBLE,
             pr_count INTEGER,
             kudos_count INTEGER,
-            achievement_count INTEGER
+            achievement_count INTEGER,
+            comment_count INTEGER,
+            athlete_count INTEGER,
+            photo_count INTEGER,
+            total_photo_count INTEGER,
+            has_heartrate BOOLEAN,
+            elev_high DOUBLE,
+            elev_low DOUBLE,
+            location_city VARCHAR,
+            location_state VARCHAR,
+            location_country VARCHAR
         )
     """)
+
+    try:
+        con.execute(f"""
+        INSERT INTO bronze_activities
+        SELECT * FROM read_parquet('{s3_path}')
+        """)
+        count = con.execute("SELECT COUNT(*) FROM bronze_activities").fetchone()[0]
+        logger.info("bronze restored from S3 → %d rows", count)
+
+    except Exception as e:
+        logger.info("No S3 bronze found → starting fresh. %s", e)
 
 
 def create_bronze_tables(con):
@@ -136,22 +149,101 @@ def create_bronze_tables(con):
 
     # insert only new records + updates to existing records from raw_activities into bronze_activities
     con.execute("""
-        INSERT INTO bronze_activities BY NAME
-        SELECT
-            id AS activity_id,
-            athlete.id AS athlete_id,
-            name, type, sport_type, workout_type, device_name,
-            start_date, start_date_local, timezone, utc_offset,
-            trainer, commute, manual, private, visibility, flagged,
-            gear_id, upload_id, upload_id_str, external_id,
-            from_accepted_tag, has_kudoed,
-            distance, moving_time, elapsed_time,
-            total_elevation_gain, average_speed, max_speed,
-            average_heartrate, max_heartrate, 
-            TRY_CAST(NULL AS DOUBLE) AS average_cadence,
-            pr_count, kudos_count, achievement_count
-        FROM raw_activities
-        WHERE id NOT IN (SELECT activity_id FROM bronze_activities)
+    INSERT INTO bronze_activities (
+        activity_id,
+        athlete_id,
+        name,
+        type,
+        sport_type,
+        workout_type,
+        device_name,
+        start_date,
+        start_date_local,
+        timezone,
+        utc_offset,
+        trainer,
+        commute,
+        manual,
+        private,
+        visibility,
+        flagged,
+        gear_id,
+        upload_id,
+        upload_id_str,
+        external_id,
+        from_accepted_tag,
+        has_kudoed,
+        distance,
+        moving_time,
+        elapsed_time,
+        total_elevation_gain,
+        average_speed,
+        max_speed,
+        average_heartrate,
+        max_heartrate,
+        average_cadence,
+        pr_count,
+        kudos_count,
+        achievement_count,
+        comment_count,
+        athlete_count,
+        photo_count,
+        total_photo_count,
+        has_heartrate,
+        elev_high,
+        elev_low,
+        location_city,
+        location_state,
+        location_country
+    )
+    SELECT
+        id AS activity_id,
+        athlete.id AS athlete_id,
+        name,
+        type,
+        sport_type,
+        workout_type,
+        device_name,
+        start_date,
+        start_date_local,
+        timezone,
+        utc_offset,
+        trainer,
+        commute,
+        manual,
+        private,
+        visibility,
+        flagged,
+        gear_id,
+        upload_id,
+        upload_id_str,
+        external_id,
+        from_accepted_tag,
+        has_kudoed,
+        distance,
+        moving_time,
+        elapsed_time,
+        total_elevation_gain,
+        average_speed,
+        max_speed,
+        average_heartrate,
+        max_heartrate,
+        average_cadence,
+        pr_count,
+        kudos_count,
+        achievement_count,
+        COALESCE(comment_count, 0),
+        COALESCE(athlete_count, 0),
+        COALESCE(photo_count, 0),
+        COALESCE(total_photo_count, 0),
+        COALESCE(has_heartrate, FALSE),
+        elev_high,
+        elev_low,
+        location_city,
+        location_state,
+        location_country
+    FROM raw_activities
+    WHERE id NOT IN (SELECT activity_id FROM bronze_activities)
     """)
 
     validate_counts(con, "raw_activities", "bronze_activities")
@@ -166,15 +258,15 @@ def create_bronze_tables(con):
     # remaining bronze tables — safe to full refresh as they're derived from bronze_activities
     other_bronze = {
         "bronze_heartrate": """
-            SELECT
-                activity_id,
-                has_heartrate,
-                average_heartrate,
-                max_heartrate,
-                heartrate_opt_out,
-                display_hide_heartrate_option
-            FROM bronze_activities
-        """,
+        SELECT
+            activity_id,
+            has_heartrate,
+            average_heartrate,
+            max_heartrate,
+            NULL AS heartrate_opt_out,
+            NULL AS display_hide_heartrate_option
+        FROM bronze_activities
+    """,
         "bronze_metrics": """
             SELECT
                 activity_id,
@@ -206,21 +298,6 @@ def create_bronze_tables(con):
                 location_city,
                 location_state,
                 location_country
-            FROM bronze_activities
-        """,
-        "bronze_map": """
-            SELECT
-                activity_id,
-                map.id AS map_id,
-                map.summary_polyline,
-                map.resource_state
-            FROM bronze_activities
-        """,
-        "bronze_geo": """
-            SELECT
-                activity_id,
-                start_latlng,
-                end_latlng
             FROM bronze_activities
         """,
     }
