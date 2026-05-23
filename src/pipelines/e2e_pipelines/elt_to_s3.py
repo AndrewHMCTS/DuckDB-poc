@@ -160,11 +160,6 @@ def create_bronze_tables(con):
             max_speed,
             average_heartrate,
             max_heartrate,
-            CASE
-                WHEN sport_type = 'Run'
-                THEN TRY_CAST(average_cadence AS DOUBLE)
-                ELSE NULL
-            END AS average_cadence,
             pr_count,
             kudos_count,
             achievement_count,
