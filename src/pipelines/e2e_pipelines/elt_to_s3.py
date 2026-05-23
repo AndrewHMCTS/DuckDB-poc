@@ -63,6 +63,15 @@ def create_raw_tables(con):
 
 
 def load_bronze_from_s3(con):
+    """
+    Restore bronze_activities from S3 before inserting new records.
+    This is essential because GitHub Actions spins up a fresh runner each time,
+    meaning the local strava.duckdb is always empty — without this restore,
+    bronze_activities only ever contains the current batch and all history is lost.
+
+    On first run (no S3 file yet), falls back to creating an empty table.
+    """
+
     s3_path = f"s3://{BUCKET}/bronze/bronze_activities.parquet"
 
     logger.info("Loading bronze snapshot from S3")
@@ -76,12 +85,12 @@ def load_bronze_from_s3(con):
 
 # def restore_bronze_from_s3(con):
 #     """
-#     Restore bronze_activities from S3 before inserting new records.
-#     This is essential because GitHub Actions spins up a fresh runner each time,
-#     meaning the local strava.duckdb is always empty — without this restore,
-#     bronze_activities only ever contains the current batch and all history is lost.
+# Restore bronze_activities from S3 before inserting new records.
+# This is essential because GitHub Actions spins up a fresh runner each time,
+# meaning the local strava.duckdb is always empty — without this restore,
+# bronze_activities only ever contains the current batch and all history is lost.
 
-#     On first run (no S3 file yet), falls back to creating an empty table.
+# On first run (no S3 file yet), falls back to creating an empty table.
 #     """
 #     s3_path = f"s3://{BUCKET}/bronze/bronze_activities.parquet"
 
@@ -151,7 +160,7 @@ def create_bronze_tables(con):
             max_speed,
             average_heartrate,
             max_heartrate,
-            average_cadence,
+            TRY_CAST(average_cadence AS DOUBLE) AS average_cadence,
             pr_count,
             kudos_count,
             achievement_count,
