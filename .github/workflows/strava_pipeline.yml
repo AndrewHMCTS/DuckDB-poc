@@ -33,18 +33,3 @@ jobs:
           STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
           STRAVA_REFRESH_TOKEN: ${{ secrets.STRAVA_REFRESH_TOKEN }}
         run: uv run src/pipelines/e2e_pipelines/main.py
-
-      - name: Notify on failure
-        if: failure()
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: smtp.gmail.com
-          server_port: 465
-          username: ${{ secrets.GMAIL_USERNAME }}
-          password: ${{ secrets.GMAIL_APP_PASSWORD }}
-          subject: "❌ Strava Pipeline Failed"
-          body: |
-            The Strava pipeline failed on ${{ github.run_id }}.
-            Check the logs here: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          to: andrew.mcdevitt@solirius.com
-          from: andrew.mcdevitt@solirius.com
