@@ -71,63 +71,82 @@ def load_bronze_from_s3(con):
 
     On first run (no S3 file yet), falls back to creating an empty table.
     """
-
     s3_path = f"s3://{BUCKET}/bronze/bronze_activities.parquet"
 
-    logger.info("Loading bronze snapshot from S3")
+    logger.info("Restoring bronze from S3 (safe mode)")
 
-    con.execute(f"""
-        CREATE OR REPLACE TABLE bronze_activities AS
-        SELECT *
-        FROM read_parquet('{s3_path}')
+    con.execute("""
+        CREATE OR REPLACE TABLE bronze_activities (
+            activity_id BIGINT,
+            athlete_id BIGINT,
+            name VARCHAR,
+            type VARCHAR,
+            sport_type VARCHAR,
+            workout_type VARCHAR,
+            device_name VARCHAR,
+            start_date VARCHAR,
+            start_date_local VARCHAR,
+            timezone VARCHAR,
+            utc_offset DOUBLE,
+            trainer BOOLEAN,
+            commute BOOLEAN,
+            manual BOOLEAN,
+            private BOOLEAN,
+            visibility VARCHAR,
+            flagged BOOLEAN,
+            gear_id VARCHAR,
+            upload_id BIGINT,
+            upload_id_str VARCHAR,
+            external_id VARCHAR,
+            from_accepted_tag BOOLEAN,
+            has_kudoed BOOLEAN,
+            distance DOUBLE,
+            moving_time INTEGER,
+            elapsed_time INTEGER,
+            total_elevation_gain DOUBLE,
+            average_speed DOUBLE,
+            max_speed DOUBLE,
+            average_heartrate DOUBLE,
+            max_heartrate DOUBLE,
+            pr_count INTEGER,
+            kudos_count INTEGER,
+            achievement_count INTEGER,
+            comment_count INTEGER,
+            athlete_count INTEGER,
+            photo_count INTEGER,
+            total_photo_count INTEGER,
+            has_heartrate BOOLEAN,
+            elev_high DOUBLE,
+            elev_low DOUBLE,
+            location_city VARCHAR,
+            location_state VARCHAR,
+            location_country VARCHAR
+        )
     """)
 
+    try:
+        con.execute(f"""
+            INSERT INTO bronze_activities
+            SELECT * FROM read_parquet('{s3_path}')
+        """)
+        logger.info("Bronze restored from S3")
 
-# def restore_bronze_from_s3(con):
-#     """
-# Restore bronze_activities from S3 before inserting new records.
-# This is essential because GitHub Actions spins up a fresh runner each time,
-# meaning the local strava.duckdb is always empty — without this restore,
-# bronze_activities only ever contains the current batch and all history is lost.
-
-# On first run (no S3 file yet), falls back to creating an empty table.
-#     """
-#     s3_path = f"s3://{BUCKET}/bronze/bronze_activities.parquet"
-
-#     con.execute(f"""
-#         CREATE OR REPLACE TABLE bronze_activities AS
-#         SELECT *
-#         FROM read_parquet('{s3_path}')
-#     """)
-
-#     try:
-#         con.execute(f"""
-#         INSERT INTO bronze_activities
-#         SELECT * FROM read_parquet('{s3_path}')
-#         """)
-#         count = con.execute("SELECT COUNT(*) FROM bronze_activities").fetchone()[0]
-#         logger.info("bronze restored from S3 → %d rows", count)
-
-# except Exception as e:
-#     logger.info("No S3 bronze found → starting fresh. %s", e)
+    except Exception as e:
+        logger.warning("No S3 bronze found → starting fresh: %s", e)
 
 
 def create_bronze_tables(con):
     """
     Bronze is append-only + deduplicated on activity_id.
     New records are inserted, existing records are never overwritten.
+    restore_bronze_from_s3() must be called first so that bronze_activities
+    contains full history before we insert new records from raw_activities"""
 
-    restore_bronze_from_s3() must be called first so that
-    bronze_activities contains full history before we insert new records from raw_activities.
-    """
-
-    # restore full history from S3 into local DuckDB
-    # restore_bronze_from_s3(con)
     load_bronze_from_s3(con)
 
-    # insert only new records + updates to existing records from raw_activities into bronze_activities
+    # Insert new + dedupe safely
     con.execute("""
-        CREATE OR REPLACE TABLE bronze_new AS
+        INSERT INTO bronze_activities
         SELECT
             id AS activity_id,
             athlete.id AS athlete_id,
@@ -158,32 +177,28 @@ def create_bronze_tables(con):
             total_elevation_gain,
             average_speed,
             max_speed,
-            average_heartrate,
-            max_heartrate,
-            pr_count,
-            kudos_count,
-            achievement_count,
-            COALESCE(comment_count, 0) AS comment_count,
-            COALESCE(athlete_count, 0) AS athlete_count,
-            COALESCE(photo_count, 0) AS photo_count,
-            COALESCE(total_photo_count, 0) AS total_photo_count,
-            COALESCE(has_heartrate, FALSE) AS has_heartrate,
+            COALESCE(TRY_CAST(average_heartrate AS DOUBLE), NULL),
+            COALESCE(TRY_CAST(max_heartrate AS DOUBLE), NULL),
+            COALESCE(pr_count, 0),
+            COALESCE(kudos_count, 0),
+            COALESCE(achievement_count, 0),
+            COALESCE(comment_count, 0),
+            COALESCE(athlete_count, 0),
+            COALESCE(photo_count, 0),
+            COALESCE(total_photo_count, 0),
+            COALESCE(has_heartrate, FALSE),
             elev_high,
             elev_low,
             location_city,
             location_state,
             location_country
         FROM raw_activities
-        WHERE id NOT IN (
-            SELECT activity_id FROM bronze_activities
+        -- prevent duplicates safely
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM bronze_activities b
+            WHERE b.activity_id = raw_activities.id
         )
-    """)
-
-    con.execute("""
-        CREATE OR REPLACE TABLE bronze_activities AS
-        SELECT * FROM bronze_activities
-        UNION ALL
-        SELECT * FROM bronze_new
     """)
 
     validate_counts(con, "raw_activities", "bronze_activities")
