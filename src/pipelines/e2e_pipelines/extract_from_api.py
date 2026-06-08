@@ -48,7 +48,7 @@ class StravaClient:
 
     def _get_token(self) -> dict:
         response = requests.post(
-            f"{self.BASE_URL}/oauth/token",
+            "https://www.strava.com/oauth/token",
             data={
                 "client_id": os.getenv("STRAVA_CLIENT_ID"),
                 "client_secret": os.getenv("STRAVA_CLIENT_SECRET"),
