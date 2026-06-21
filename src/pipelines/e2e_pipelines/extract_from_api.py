@@ -71,16 +71,16 @@ class StravaClient:
     def get_activities(self, after: datetime | None = None) -> list:
         """
         Fetch activities. If after is provided, only fetch activities
-        newer than that datetime — incremental load.
-        If None, fetch all activities — full load (first run).
+        newer than that datetime - incremental load.
+        If None, fetch all activities - full load (first run).
         """
         params = {"per_page": 200}
 
         if after:
             params["after"] = int(after.timestamp())
-            logger.info("Incremental load — after %s", after.isoformat())
+            logger.info("Incremental load - after %s", after.isoformat())
         else:
-            logger.info("Full load — fetching all activities")
+            logger.info("Full load - fetching all activities")
 
         activities, page = [], 1
         while True:
@@ -126,6 +126,12 @@ class StravaClient:
 
 
 def save_raw(filename: str, data):
+    """
+    Save filename.json to raw directory. Deduplicate dicts based on key per file type
+    Query the existing file. if it is a list of records, retrieve the matching lambda function
+    Append files to 'existing' list. If path exists, load data to RAW_DIR
+    Use dict comprehension as keys are unique. Duplicates disappear. New data added, modified data is updated (ACID)
+    """
     path = os.path.join(RAW_DIR, f"{filename}.json")
 
     # Dedup key per file type
@@ -183,7 +189,7 @@ def run_extraction() -> bool:
     watermark = get_watermark_from_motherduck()
 
     if not watermark:
-        logger.info("No watermark — full load")
+        logger.info("No watermark - full load")
 
     client = StravaClient()
     activities = client.get_activities(after=watermark)
@@ -219,5 +225,5 @@ def run_extraction() -> bool:
     save_raw("raw_strava_comments_partial", all_comments)
     save_raw("raw_strava_kudos_partial", all_kudos)
 
-    logger.info("Extraction complete — %d new activities", len(activities))
+    logger.info("Extraction complete - %d new activities", len(activities))
     return True
